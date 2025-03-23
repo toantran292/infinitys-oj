@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:20256
+    ports:
+      - "20256:20256"
+    volumes:
+      - .:/app
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - WEBHOOK_URL=http://host.docker.internal:9999/
+      - AWS_ACCESS_KEY_ID=HrNRKvVa2ydc3t9cpsEd
+      - AWS_SECRET_ACCESS_KEY=ftJDm0nyeHdY2wSqOQE4q5DYa2vVj93lIiZiu0J2
+      - AWS_DEFAULT_REGION=ap-southeast-1
+      - AWS_S3_ENDPOINT=http://host.docker.internal:20253
+    depends_on:
+      - redis
+    networks:
+      - grader-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - grader-network
+
+  worker:
+    build: .
+    command: celery -A backend worker --loglevel=info --concurrency=5 -Q grading
+    volumes:
+      - .:/app
+      - grader_codebox:/grader/codebox
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    depends_on:
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - WEBHOOK_URL=http://host.docker.internal:9999/
+      - AWS_ACCESS_KEY_ID=HrNRKvVa2ydc3t9cpsEd
+      - AWS_SECRET_ACCESS_KEY=ftJDm0nyeHdY2wSqOQE4q5DYa2vVj93lIiZiu0J2
+      - AWS_DEFAULT_REGION=ap-southeast-1
+      - AWS_S3_ENDPOINT=http://host.docker.internal:20253
+    networks:
+      - grader-network      
+
+networks:
+  grader-network:
+    driver: bridge
+
+volumes:
+  grader_codebox:
