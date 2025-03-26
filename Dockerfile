@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Cài g++ + curl để compile C++ và test
 RUN apt-get update && \
-    apt-get install -y g++ curl docker.io && \
+    apt-get install -y g++ curl docker.io  time && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

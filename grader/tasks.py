@@ -91,47 +91,63 @@ def run_cpp_code_sandboxed(source_code: str, input_data: str, time_limit: int, m
         )
 
         if compile_proc.returncode != 0:
-            return "CE", compile_proc.stderr.decode()
+            return "CE", compile_proc.stderr.decode(), 0, 0
 
+        import time
+        start_time = time.time()
+        
         with open(input_path, "rb") as f_in, open(output_path, "wb") as f_out:
             run_proc = subprocess.run(
-                [exe_path],
+                ["/usr/bin/time", "-f", "%M", exe_path],  # Sử dụng time để đo memory
                 stdin=f_in,
                 stdout=f_out,
                 stderr=subprocess.PIPE,
                 timeout=time_limit,
                 preexec_fn=set_limits(memory_limit * 1024 * 1024)
             )
+        
+        end_time = time.time()
+        runtime = (end_time - start_time) * 1000  # Convert to milliseconds
+        
+        # Lấy memory usage từ output của time command
+        memory_usage = int(run_proc.stderr.decode().strip()) # KB
 
         with open(output_path, "r") as f:
-            return "OK", f.read().strip()
+            return "OK", f.read().strip(), runtime, memory_usage
 
     except subprocess.TimeoutExpired:
-        return "TLE", ""
+        return "TLE", "", time_limit * 1000, 0
 
     except MemoryError:
-        return "MLE", "Memory limit exceeded."
+        return "MLE", "Memory limit exceeded.", 0, memory_limit * 1024
 
     except Exception as e:
-        return "RE", str(e)
+        return "RE", str(e), 0, 0
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 def list_testcases(bucket, problem_id):
-    response = s3.list_objects_v2(Bucket=bucket, Prefix=f"problems/{problem_id}/testcase_")
-    inputs, outputs = [], []
+    response = s3.list_objects_v2(Bucket=bucket, Prefix=f"testcases/problems/{problem_id}/testcase_")
+    inputs = {}
+    outputs = {}
 
+    # Phân loại các file theo số testcase
     for obj in response.get("Contents", []):
         key = obj["Key"]
         if key.endswith(".in"):
-            inputs.append(key)
+            testcase_num = key.replace(".in", "").split("testcase_")[-1]
+            inputs[testcase_num] = key
         elif key.endswith(".out"):
-            outputs.append(key)
+            testcase_num = key.replace(".out", "").split("testcase_")[-1]
+            outputs[testcase_num] = key
 
-    inputs.sort()
-    outputs.sort()
-    return list(zip(inputs, outputs))
+    # Chỉ lấy những testcase có đủ cả input và output
+    valid_pairs = []
+    for testcase_num in sorted(set(inputs.keys()) & set(outputs.keys())):
+        valid_pairs.append((inputs[testcase_num], outputs[testcase_num]))
+
+    return valid_pairs
 
 
 @shared_task(name="grade_submission", queue="grading")
@@ -153,7 +169,7 @@ def grade_submission(submission_id):
             s3.get_object(Bucket=bucket, Key=out_key)["Body"].read().decode().strip()
         )
 
-        status, output = run_cpp_code_sandboxed(
+        status, output, runtime, memory = run_cpp_code_sandboxed(
             sub.code_content,
             input_data,
             time_limit=sub.time_limit,
@@ -163,7 +179,12 @@ def grade_submission(submission_id):
         if status == "OK":
             status = "AC" if output.strip() == expected_output else "WA"
 
-        result.append({"testcase": idx, "status": status})
+        result.append({
+            "testcase": idx, 
+            "status": status,
+            "runtime": round(runtime, 2),  # ms
+            "memory": memory  # KB
+        })
 
     # Gửi về webhook
     webhook_url = os.environ.get("WEBHOOK_URL")
@@ -172,11 +193,7 @@ def grade_submission(submission_id):
             webhook_url,
             json={
                 "problem_id": sub.problem_id,
-                "submission_id": sub.id,
+                "submission_id": sub.submission_id,
                 "result": result,
-                "raw": {
-                    "status": status,
-                    "output": output.strip(),
-                }
             },
         )

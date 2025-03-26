@@ -10,7 +10,7 @@ services:
       - .:/app
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - WEBHOOK_URL=http://host.docker.internal:9999/
+      - WEBHOOK_URL=http://host.docker.internal:20250/webhooks/oj
       - AWS_ACCESS_KEY_ID=HrNRKvVa2ydc3t9cpsEd
       - AWS_SECRET_ACCESS_KEY=ftJDm0nyeHdY2wSqOQE4q5DYa2vVj93lIiZiu0J2
       - AWS_DEFAULT_REGION=ap-southeast-1
@@ -39,13 +39,15 @@ services:
       - redis
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - WEBHOOK_URL=http://host.docker.internal:9999/
+      - WEBHOOK_URL=http://host.docker.internal:20250/webhooks/oj
       - AWS_ACCESS_KEY_ID=HrNRKvVa2ydc3t9cpsEd
       - AWS_SECRET_ACCESS_KEY=ftJDm0nyeHdY2wSqOQE4q5DYa2vVj93lIiZiu0J2
       - AWS_DEFAULT_REGION=ap-southeast-1
       - AWS_S3_ENDPOINT=http://host.docker.internal:20253
     networks:
-      - grader-network      
+      - grader-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   grader-network:

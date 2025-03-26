@@ -9,6 +9,7 @@ from .tasks import grade_submission
 @method_decorator(csrf_exempt, name='dispatch')
 class SubmitCodeView(View):
     def post(self, request):
+        print("hi")
         try:
             data = json.loads(request.body)
             required_fields = [
